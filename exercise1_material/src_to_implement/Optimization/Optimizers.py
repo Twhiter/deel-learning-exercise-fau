@@ -6,3 +6,5 @@ class Sgd:
         return weight_tensor - self.learning_rate * gradient_tensor
 
 
+
+
