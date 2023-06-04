@@ -27,6 +27,7 @@ class FullyConnected(BaseLayer):
         e_n_1 = error_tensor @ self.weights.T[:,:-1]
 
         self.gradient_weights = self.input_tensor.T @ error_tensor
+
         if self.optimizer is not None:
             self.weights = self.optimizer.calculate_update(self.weights,self.gradient_weights)
         return e_n_1
