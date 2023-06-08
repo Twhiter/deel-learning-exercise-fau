@@ -1,4 +1,5 @@
 import copy
+import math
 
 import numpy as np
 from scipy.signal import convolve,correlate
@@ -102,10 +103,21 @@ class Conv(BaseLayer):
                     slices = np.zeros(up_sampled_error_tensor.shape, dtype='bool')
 
                     if len(self.convolution_shape[1:]) == 1:
-                        slices[0:self.convolution_shape[1]] = True
-                    else:
-                        slices[0:self.convolution_shape[1],0:self.convolution_shape[2]] = True
+                        kx = math.ceil((self.convolution_shape[1] + 1) / 2) - 1
+                        xs = np.array(range(-kx, self.convolution_shape[1] - kx)) + math.ceil((sample[j].shape[0] + 1) / 2) - 1
 
+                        slices[xs] = True
+                    else:
+
+                        kx = math.ceil((self.convolution_shape[1] + 1) / 2) - 1
+                        ky = math.ceil((self.convolution_shape[2] + 1) / 2) - 1
+
+                        xs = np.array(range(-kx,self.convolution_shape[1] - kx)) + math.ceil((sample[j].shape[0] + 1) / 2) - 1
+                        ys = np.array(range(-ky,self.convolution_shape[2] - ky)) + math.ceil((sample[j].shape[1] + 1) / 2) - 1
+
+                        x,y = np.meshgrid(xs,ys)
+
+                        slices[x,y] = True
 
                     kernels_gradients[n, i, j] = (correlate(sample[j], up_sampled_error_tensor, mode='same')[slices]).reshape(self.convolution_shape[1:])
                     error_gradients[n, j] += convolve(up_sampled_error_tensor, self.weights[i, j], mode='same')
@@ -115,7 +127,7 @@ class Conv(BaseLayer):
         self.gradient_weights = np.sum(kernels_gradients,axis=0)
         self.gradient_bias = bias_gradients.copy()
 
-        self._optimizer.calculate_update(self.weights, self.gradient_weights)
-        self._optimizer2.calculate_update(self.bias, self.gradient_bias)
+        self.weights = self._optimizer.calculate_update(self.weights, self.gradient_weights)
+        self.bias = self._optimizer2.calculate_update(self.bias, self.gradient_bias)
 
         return error_gradients
