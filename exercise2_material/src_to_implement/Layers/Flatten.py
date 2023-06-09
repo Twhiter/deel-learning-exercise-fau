@@ -6,7 +6,7 @@ class Flatten(BaseLayer):
 
     def __init__(self):
         super().__init__()
-
+        self.shapes = None
 
     def forward(self,input_tensor):
         self.shapes = input_tensor.shape

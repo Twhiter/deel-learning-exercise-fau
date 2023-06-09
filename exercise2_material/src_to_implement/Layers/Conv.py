@@ -77,57 +77,92 @@ class Conv(BaseLayer):
         return row
 
     def backward(self, error_tensors):
+        batch_num = len(self.input_tensor)
 
-        num_batch = len(error_tensors)
-        bias_gradients = np.zeros(self.num_kernels)
-        error_gradients = np.zeros((num_batch,*self.input_tensor[0].shape))
-        kernels_gradients = np.zeros((num_batch,self.num_kernels, *self.convolution_shape))
+        # down sampling
+        upsampled_error_tensors = np.zeros((batch_num, self.num_kernels, *self.input_tensor[0, 0].shape))
 
-        # iterate over batch
-        for n in range(num_batch):
+        if len(self.stride_shape) == 2:
+            upsampled_error_tensors[:, :, ::self.stride_shape[0], ::self.stride_shape[1]] = error_tensors
+            pad = self.padding2D
+            unpad = self.unpad2D
+        else:
+            upsampled_error_tensors[:, :, ::self.stride_shape[0]] = error_tensors
+            pad = self.padding1D
+            unpad = self.unpad1D
 
+        kernel_gradients = np.zeros((batch_num, self.num_kernels, *self.convolution_shape))
+        error_gradients = np.zeros((batch_num, *self.input_tensor[0].shape))
+        bias_gradients = np.zeros((batch_num, self.num_kernels))
+
+        for n, error_tensor in enumerate(upsampled_error_tensors):
             sample = self.input_tensor[n]
-            error_tensor = error_tensors[n]
 
-            # output channel depth
-            for i in range(self.num_kernels):
-                # input channel depth
-                for j in range(self.convolution_shape[0]):
+            for kernel_idx in range(self.num_kernels):
 
-                    up_sampled_error_tensor = np.zeros(sample[j].shape)
-                    if len(self.stride_shape) == 1:
-                        up_sampled_error_tensor[0::self.stride_shape[0]] = error_tensor[i]
-                    else:
-                        up_sampled_error_tensor[0::self.stride_shape[0], 0::self.stride_shape[1]] = error_tensor[i]
+                for channel, image in enumerate(sample):
+                    padded_image = pad(image, *self.convolution_shape[1:])
+                    kernel_gradients[n, kernel_idx, channel] = correlate(padded_image, error_tensor[kernel_idx],
+                                                                         mode='valid')
 
-                    slices = np.zeros(up_sampled_error_tensor.shape, dtype='bool')
+                    t = convolve(error_tensor[kernel_idx], self.weights[kernel_idx, channel], mode='full')
+                    error_gradients[n, channel] += unpad(t, *self.convolution_shape[1:])
 
-                    if len(self.convolution_shape[1:]) == 1:
-                        kx = math.ceil((self.convolution_shape[1] + 1) / 2) - 1
-                        xs = np.array(range(-kx, self.convolution_shape[1] - kx)) + math.ceil((sample[j].shape[0] + 1) / 2) - 1
+                bias_gradients[n, kernel_idx] = np.sum(error_tensor[kernel_idx])
 
-                        slices[xs] = True
-                    else:
+        self.gradient_weights = np.sum(kernel_gradients, axis=0)
+        self.gradient_bias = np.sum(bias_gradients, axis=0)
 
-                        kx = math.ceil((self.convolution_shape[1] + 1) / 2) - 1
-                        ky = math.ceil((self.convolution_shape[2] + 1) / 2) - 1
-
-                        xs = np.array(range(-kx,self.convolution_shape[1] - kx)) + math.ceil((sample[j].shape[0] + 1) / 2) - 1
-                        ys = np.array(range(-ky,self.convolution_shape[2] - ky)) + math.ceil((sample[j].shape[1] + 1) / 2) - 1
-
-                        x,y = np.meshgrid(xs,ys)
-
-                        slices[x,y] = True
-
-                    kernels_gradients[n, i, j] = (correlate(sample[j], up_sampled_error_tensor, mode='same')[slices]).reshape(self.convolution_shape[1:])
-                    error_gradients[n, j] += convolve(up_sampled_error_tensor, self.weights[i, j], mode='same')
-
-                bias_gradients[i] += np.sum(error_tensor[i])
-
-        self.gradient_weights = np.sum(kernels_gradients,axis=0)
-        self.gradient_bias = bias_gradients.copy()
-
-        self.weights = self._optimizer.calculate_update(self.weights, self.gradient_weights)
-        self.bias = self._optimizer2.calculate_update(self.bias, self.gradient_bias)
+        self.weights = self._optimizer.calculate_update(self.weights,self.gradient_weights)
+        self.bias = self._optimizer2.calculate_update(self.bias,self.gradient_bias)
 
         return error_gradients
+
+
+
+    def padding2D(self, sample, kernel_height, kernel_width):
+
+        w1 = math.ceil((kernel_width - 1) / 2)
+        w2 = math.floor((kernel_width - 1) / 2)
+
+        h1 = math.ceil((kernel_height - 1) / 2)
+        h2 = math.floor((kernel_height - 1) / 2)
+
+        padded_sample = np.zeros(np.array(sample.shape) + (h1 + h2, w1 + w2))
+
+        padded_sample[h1:h1 + sample.shape[0], w1:w1 + sample.shape[1]] = sample
+
+        return padded_sample
+
+    def unpad2D(self, padded_sample, kernel_height, kernel_width):
+
+        w1 = math.ceil((kernel_width - 1) / 2)
+        w2 = math.floor((kernel_width - 1) / 2)
+
+        h1 = math.ceil((kernel_height - 1) / 2)
+        h2 = math.floor((kernel_height - 1) / 2)
+
+        return padded_sample[h1:padded_sample.shape[0] - h2,w1:padded_sample.shape[1] - w2]
+
+    def padding1D(self,sample,kernel_width):
+
+        w1 = math.ceil((kernel_width - 1) / 2)
+        w2 = math.floor((kernel_width - 1) / 2)
+
+        padded_sample = np.zeros(np.array(sample.shape[0] + w1 + w2))
+
+        padded_sample[w1:w1 + sample.shape[0]] = sample
+
+        return padded_sample
+
+    def unpad1D(self,padded_sample,kernel_width):
+
+        w1 = math.ceil((kernel_width - 1) / 2)
+        w2 = math.floor((kernel_width - 1) / 2)
+
+        return padded_sample[w1:padded_sample.shape[0] - w2]
+
+
+
+
+
