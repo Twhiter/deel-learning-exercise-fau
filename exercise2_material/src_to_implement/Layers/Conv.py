@@ -14,8 +14,8 @@ class Conv(BaseLayer):
         super().__init__()
 
         self.input_tensor = None
-        self._optimizer = Sgd(1)
-        self._optimizer2 = Sgd(1)
+        self._optimizer = None
+        self._optimizer2 = None
 
         self.trainable = True
 
@@ -28,6 +28,9 @@ class Conv(BaseLayer):
 
         self.gradient_weights = 0
         self.gradient_bias = 0
+
+
+
 
     @property
     def optimizer(self):
@@ -113,8 +116,10 @@ class Conv(BaseLayer):
         self.gradient_weights = np.sum(kernel_gradients, axis=0)
         self.gradient_bias = np.sum(bias_gradients, axis=0)
 
-        self.weights = self._optimizer.calculate_update(self.weights,self.gradient_weights)
-        self.bias = self._optimizer2.calculate_update(self.bias,self.gradient_bias)
+        if self._optimizer is not None and self._optimizer2 is not None:
+
+            self.weights = self._optimizer.calculate_update(self.weights, self.gradient_weights)
+            self.bias = self._optimizer2.calculate_update(self.bias, self.gradient_bias)
 
         return error_gradients
 
