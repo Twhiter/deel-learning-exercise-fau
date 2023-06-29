@@ -33,13 +33,3 @@ class Dropout(BaseLayer):
 
         return error_tensor_previous / self.probability
 
-
-
-
-
-
-
-
-
-
-

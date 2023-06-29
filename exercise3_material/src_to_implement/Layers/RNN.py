@@ -99,13 +99,13 @@ class RNN(BaseLayer):
             self.sigmoid.forward(self.os[t])
             ot_gradient = self.sigmoid.backward(et)
 
-            self.f2.input_tensor = np.hstack((self.hs[t],np.zeros((1,1))))
+            self.f2.input_tensor = np.hstack((self.hs[t],np.ones((1,1))))
             ht_gradient = self.f2.backward(ot_gradient) + accumulated
 
             self.tanh.forward(self.us[t])
             ut_gradient = self.tanh.backward(ht_gradient)
 
-            self.f1.input_tensor = np.hstack((self.x_tildes[t],np.zeros((1,1))))
+            self.f1.input_tensor = np.hstack((self.x_tildes[t],np.ones((1,1))))
             x_tilde_gradient = self.f1.backward(ut_gradient)
 
             self.gradient_weights += self.f1.gradient_weights

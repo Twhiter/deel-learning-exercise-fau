@@ -50,13 +50,32 @@ class TestRNN(unittest.TestCase):
                 loss = self.compute_loss(input_tensor)
                 numerical_error[i, j] = (loss - loss_true) / h
 
-        
 
         return numerical_error
+
+    def compute_numerical_gradient(self):
+        h = 1e-7
+        numerical_gradient = np.zeros_like(self.rnn.weights)
+
+        loss_true = self.compute_loss(self.input_tensor)
+
+        for i in range(21):
+            for j in range(7):
+                weights = self.weights.copy()
+                weights[i, j] += h
+
+                self.rnn.weights = weights
+
+                loss = self.compute_loss(self.input_tensor)
+                numerical_gradient[i, j] = (loss - loss_true) / h
+
+        return numerical_gradient
+
     
     def test_error_tensor_gradient(self):
         numerical_error = self.compute_numerical_error()
-        error_tensor, _ = self.compute_error_and_gradient_weigths()
+        numerical_gradient = self.compute_numerical_gradient()
+        error_tensor, gradient_weights = self.compute_error_and_gradient_weigths()
 
 
         print('- numerical_error \n', numerical_error, '\n\n')
@@ -65,3 +84,6 @@ class TestRNN(unittest.TestCase):
         print('- difference \n', numerical_error - error_tensor, '\n\n')
 
         np.testing.assert_almost_equal(error_tensor, numerical_error, decimal=4)
+
+        print('-- gradient weight\n',gradient_weights,'\n\n')
+        print('--numerical gradient\n',numerical_gradient,'\n\n')
